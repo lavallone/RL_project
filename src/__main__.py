@@ -31,9 +31,10 @@ def parse_args():
     parser.add_argument("--action_type", type=str, default="fire", help="Allowed actions for the agent. ('fire', 'fire_ball' or 'ball').", required=True)
     # this can become the type of applied restraining bolt
     parser.add_argument("--rb_type", type=str, default="sx2dx", help="Type of restraining bolt('sx2dx', 'dx2sx', 'down2up', 'up2down', '2targets' and '3targets').", required=True)
-    # tabular q-learning lambda, DQN or PPO
-    parser.add_argument("--algorithm", type=str, default="sarsa", help="RL algorithm ('sarsa', 'q', 'ddqn' or 'ppo').", required=True)
+    # tabular q-learning/lambda, DQN/DDQN or PPO
+    parser.add_argument("--algorithm", type=str, default="sarsa", help="RL algorithm ('sarsa', 'q', 'ddqn', 'ddqn' or 'ppo').", required=True)
     
+    parser.add_argument("--is_wandb", type=str, default="no_wandb", help="If we use wandb or not.")
     parser.add_argument("--brick-reward", type=int, default=5, help="The reward for breaking a brick.")
     parser.add_argument("--step-reward", type=float, default=-0.01, help="The reward (cost) when nothing happens.")
     parser.add_argument("--goal-reward", type=int, default=1000, help="The reward for satisfying the temporal goal.")

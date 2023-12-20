@@ -1,27 +1,14 @@
 -i https://pypi.org/simple
-cloudpickle==1.2.2
-cycler==0.10.0
-future==0.18.2
-graphviz==0.13.2
-gym==0.15.4
+
 flloat==0.2.3
-gym-breakout-pygame@ git+https://github.com/sapienza-rl/gym-breakout-pygame@980952a781164e2bec5fe99889a811f4dc67ea9c
 inferrer@ git+https://github.com/sapienza-rl/inferrer.git@cb76a979f708d283ac85247ed3080064969fb23c
-temprl@ git+https://github.com/sapienza-rl/temprl.git@58fa048ec3111ab2625c517fa667b57cf7d71086
 kiwisolver==1.1.0
 lark-parser==0.7.8
-matplotlib==3.1.2
+
+gym==0.15.4
 numpy==1.18.1
-opencv-python==4.1.2.30
-pandas==0.25.3
-pyglet==1.3.2
 pyparsing==2.4.6
 pythomata==0.2.0
-python-dateutil==2.8.1
-pytz==2019.3
-pyyaml==5.3
-scipy==1.4.1
-six==1.13.0
 pygame
 wandb
 tqdm

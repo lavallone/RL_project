@@ -16,31 +16,33 @@ class Hparams:
     td_min_eps: float = 0.01
     
     ## DDQN
-    ddqn_train_steps: int = 1000000
-    ddqn_gamma: float = 0.99
-    ddqn_min_eps: float = 0.01
-    ddqn_network_update_frequency: int = 5
-    ddqn_network_sync_frequency: int = 100
-    ddqn_batch_size: int = 512
-    ddqn_lr: float = 1e-3
-    ddqn_adam_eps: float = 1e-8
-    ddqn_n_concat_states: int = 1
+    dqn_train_steps: int = 1000000
+    dqn_log_every: int = 10
+    dqn_eval_episodes: int = 1
+    dqn_gamma: float = 0.99
+    dqn_min_eps: float = 0.01
+    dqn_network_update_frequency: int = 5
+    dqn_network_sync_frequency: int = 100
+    dqn_batch_size: int = 512
+    dqn_lr: float = 1e-3
+    dqn_adam_eps: float = 1e-8
+    dqn_n_concat_states: int = 1
     
     
     ## PPO
-    ppo_train_episodes: int = 1000
-    ppo_n_epochs: int = 10 # number of learning epochs each episode
-    ppo_n_rollout_steps: int = 2000 # rollout steps
+    ppo_train_episodes: int = 100
+    ppo_n_epochs: int = 20 # number of learning epochs each episode
+    ppo_n_rollout_steps: int = 1000 # rollout steps
     ppo_log_every: int = 5
     ppo_eval_episodes: int = 1
     # params
     ppo_gamma: float = 0.99 # used for GAE
-    ppo_lambda_: float = 0.9 # used for GAE 
-    ppo_clip_epsilon: float = 0.2 # eps for loss clipping
-    ppo_c_1: float = 0.5 # weight for value function loss 
-    ppo_c_2: float = 0.01 # weight for entropy loss
+    ppo_lambda_: float = 0.95 # used for GAE 
+    ppo_clip_epsilon: float = 0.1#0.2 # eps for loss clipping
+    ppo_c_1: float = 1#0.5 # weight for value function loss 
+    ppo_c_2: float = 0.01 #0.01 # weight for entropy loss
     # learning part
-    ppo_batch_size: int = 256 # size of training batches
+    ppo_batch_size: int = 64 # size of training batches
     ppo_lr: float = 1e-4 # adam optimizer learning rate
     ppo_adam_eps: float = 1e-8 # epsilon for adam
     ppo_n_concat_states: int = 1

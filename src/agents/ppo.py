@@ -26,6 +26,7 @@ def GAE(rewards, values, dones, gamma, lambda_, last_value, next_done):
 # evaluation loop called during training
 def evaluate_during_training(agent, eval_episodes):
     with torch.no_grad():
+        agent.network.eval()
         total_reward_list, steps_list = [], []
         for _ in range(eval_episodes):    
             state = agent.env.reset()
@@ -79,11 +80,12 @@ class RolloutDataset(Dataset):
 
 
 class PPOAgent():
-    def __init__(self, env, train_episodes = 200, n_epochs = 50, n_rollout_steps = 5000, log_every=5, eval_episodes=10, gamma = 0.99, lambda_ = 0.95,  
+    def __init__(self, env, output_dir, train_episodes = 200, n_epochs = 50, n_rollout_steps = 5000, log_every=5, eval_episodes=10, gamma = 0.99, lambda_ = 0.95,  
                  clip_epsilon = 0.2, c_1 = 0.5, c_2 = 0.01, batch_size = 256, lr = 1e-4, adam_eps = 1e-8, n_concat_states = 4):
         super(PPOAgent, self).__init__()
         
         self.env = env
+        self.output_dir = output_dir
         self.train_episodes = train_episodes
         self.n_epochs = n_epochs
         self.n_rollout_steps = n_rollout_steps
@@ -116,27 +118,27 @@ class PPOAgent():
         if len(self.states) < self.n_concat_states:
             while len(self.states) < self.n_concat_states:
                 self.states.append(scaled_state)
-        # we concatenate the frames and we generate a new representation of the state to be injencted to the networks
+        # we concatenate the frames and we generate a new representation of the state to be injected to the networks
         states = torch.cat([s for s in self.states], dim=-1).unsqueeze(0).to(self.device).to(torch.float32)
         return states
     
     # single rollout step to produce data needed for the subsequent learning step
     def rollout_step(self, state):
-        with torch.no_grad():
-            state = self.preproc_state(state)
-            actions = self.network.forward(state) # action probabilities
-            value = self.network.forward(state, "critic")
+        state = self.preproc_state(state)
+        actions = self.network.forward(state) # action probabilities
+        value = self.network.forward(state, "critic")
 
-            distribution = Categorical(actions)
-            action_sampled = distribution.sample()
-            action_logprob = distribution.log_prob(action_sampled)
+        distribution = Categorical(actions)
+        action_sampled = distribution.sample()
+        action_logprob = distribution.log_prob(action_sampled)
 
-            return state.detach().cpu().squeeze(0), action_sampled.detach().cpu().item(), action_logprob.detach().cpu().item(), value.detach().cpu().item()
+        return state.detach().cpu().squeeze(0), action_sampled.detach().cpu().item(), action_logprob.detach().cpu().item(), value.detach().cpu().item()
 
     def train(self):
         print("TRAINING STARTED...")
         try:
             for episode in range(1, self.train_episodes+1):
+                # lr linear annealing
                 frac = 1.0 - (episode - 1.0) / self.train_episodes
                 self.optimizer.param_groups[0]["lr"] = frac * self.lr
                 self.states = deque(maxlen = self.n_concat_states)
@@ -152,18 +154,16 @@ class PPOAgent():
                     rollout_buffer.logprobs.append(action_logprob)
                     rollout_buffer.values.append(value)
                     rollout_buffer.dones.append(done)
-
                     state, reward, done, _ = self.env.step(action_sampled)
                     rollout_buffer.rewards.append(reward)
-                    if done: state = self.env.reset()
-                rollout_buffer_size = len(rollout_buffer.rewards)
-                if (rollout_buffer_size % self.batch_size) == 1: continue
+                rollout_buffer_size = torch.count_nonzero(torch.tensor(rollout_buffer.dones) == False).item()
                 # 'advantages' estimation and 'returns' computation ('returns' are the the targets for the value function)
                 last_value = self.network.forward(self.preproc_state(state), "critic")
                 next_done = done
                 advantages, returns = GAE(rollout_buffer.rewards, rollout_buffer.values, rollout_buffer.dones, self.gamma, self.lambda_, last_value, next_done)
                 
                 # LEARNING PHASE
+                self.network.train()
                 dataset = RolloutDataset(rollout_buffer, advantages, returns)
                 dataloader = DataLoader(dataset, self.batch_size, shuffle=True)
                 epochs_losses = []
@@ -187,12 +187,7 @@ class PPOAgent():
                         pg_loss_1 = advantages * ratio
                         pg_loss_2 = advantages * torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
                         pg_loss = torch.min(pg_loss_1, pg_loss_2).mean()
-                        #print("----")
-                        #print(ratio)
-                        #print(advantages)
-                        #print(pg_loss.item())
                         # VALUE FUNCTION LOSS
-                        #v_loss = 0.5 * ((new_values - batch["return"]) ** 2).mean() # MSE loss
                         v_loss = self.mse_loss(new_values.to(torch.float64).view(-1), batch["return"].to(self.device)) # MSE loss
                         # ENTROPY LOSS
                         entropy_loss = entropy.mean()
@@ -206,7 +201,7 @@ class PPOAgent():
                         self.optimizer.step()
                     epochs_losses.append(torch.tensor(losses).mean().item())
                         
-                # we test the model each 'log_every' episodes for 'eval_episodes' times 
+                # we test the model each 'log_every' episodes for 'eval_episodes' times
                 if episode % self.log_every == 0:
                     self.save_model()
                     total_reward, steps = evaluate_during_training(self, self.eval_episodes)
@@ -223,8 +218,8 @@ class PPOAgent():
     
     def test(self, env, n_episodes=5, visualize=True):
         print('Testing for {} episodes ...'.format(n_episodes))
-        self.load_model()
         with torch.no_grad():
+            self.network.eval()
             for episode in range(n_episodes):
                 total_reward, steps = 0, 0
                 state = env.reset()
@@ -242,14 +237,12 @@ class PPOAgent():
                         time.sleep(0.001)
                         env.render(mode='human')
                     state = next_state
-
                 template = 'Episode {0}: reward: {1:.3f}, steps: {2}'
                 variables = [episode + 1, total_reward, steps,]
                 print(template.format(*variables))
             
     def save_model(self):
-        torch.save(self.network, "ActorCritic_net.pt")
+        torch.save(self.network, str(self.output_dir)+"/ActorCritic.pt")
 
     def load_model(self):
-        self.network = torch.load("ActorCritic_net.pt")
-        self.network.eval()
+        self.network = torch.load(str(self.output_dir)+"/ActorCritic.pt")

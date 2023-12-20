@@ -38,15 +38,37 @@ class ExperienceReplayBuffer:
     def capacity(self):
         return len(self.replay_memory) / self.memory_size
 
+# evaluation loop called during training
+def evaluate_during_training(agent, eval_episodes):
+    with torch.no_grad():
+        agent.network.eval()
+        total_reward_list, steps_list = [], []
+        for _ in range(eval_episodes):    
+            state = agent.env.reset()
+            total_reward, steps = 0, 0
+            done = False
+            while not done:
+                action = agent.epsilon_greedy_action(agent.preproc_state(state), epsilon=0.0) # greedy
+                state, reward, done, _ = agent.env.step(action)
+                total_reward += reward
+                steps += 1.0
+            total_reward_list.append(total_reward)
+            steps_list.append(steps)
+    return torch.tensor(total_reward_list).mean(), int(torch.tensor(steps_list).mean())
+
 class DDQNAgent():
-    def __init__(self, env, train_steps = 100000, gamma = 0.99, min_eps = 0.01, network_update_frequency = 10, network_sync_frequency = 200, \
+    def __init__(self, env, output_dir, type_ = "ddqn", train_steps = 100000, log_every = 5, eval_episodes = 5, gamma = 0.99, min_eps = 0.01, network_update_frequency = 10, network_sync_frequency = 200, \
                  batch_size = 256, lr = 1e-4, adam_eps = 1e-8, n_concat_states = 4):
         super(DDQNAgent, self).__init__()
         
         self.env = env
+        self.output_dir = output_dir
+        self.type = type_
         self.network_update_frequency = network_update_frequency,
         self.network_sync_frequency = network_sync_frequency
         self.train_steps = train_steps
+        self.log_every = log_every
+        self.eval_episodes = eval_episodes
         self.gamma = gamma
         self.min_eps = min_eps
         
@@ -89,7 +111,7 @@ class DDQNAgent():
         if len(self.states) < self.n_concat_states:
             while len(self.states) < self.n_concat_states:
                 self.states.append(scaled_state)
-        # we concatenate the frames and we generate a new representation of the state to be injencted to the networks
+        # we concatenate the frames and we generate a new representation of the state to be injected to the networks
         states = torch.cat([s for s in self.states], dim=-1).unsqueeze(0).to(self.device).to(torch.float32)
         return states
         
@@ -105,10 +127,12 @@ class DDQNAgent():
 
         qvals = torch.gather(self.network.get_qvals(states), 1, actions) # I didn't know this function, but it's properly suitable in this case!
         # DQN update --> r + gamma * (max_a {Q_target(s',a)})
-        #actions_evaluation = torch.max(self.target_network.get_qvals(next_states), -1)[0].reshape(-1, 1) # this reshape is needed because the above tensors have this kind os size!
+        if self.type == "dqn":
+            actions_evaluation = torch.max(self.target_network.get_qvals(next_states), -1)[0].reshape(-1, 1) # this reshape is needed because the above tensors have this kind os size!
         # DDQN update --> r + gamma * (Q_target(s', argmax_a' {Q(s',a')})
-        actions_selection = torch.max(self.network.get_qvals(next_states), -1)[1].reshape(-1, 1) # argmax
-        actions_evaluation = torch.gather(self.target_network.get_qvals(next_states), 1, actions_selection)
+        elif self.type == "ddqn":
+            actions_selection = torch.max(self.network.get_qvals(next_states), -1)[1].reshape(-1, 1) # argmax
+            actions_evaluation = torch.gather(self.target_network.get_qvals(next_states), 1, actions_selection)
         
         y_qvals = rewards + self.gamma * (1-dones) * actions_evaluation
         loss = self.loss_function(y_qvals, qvals)
@@ -134,12 +158,14 @@ class DDQNAgent():
 
         try:
             tot_steps = 0
-            episode = 0
+            episode = 1
             losses = []
             while tot_steps <= self.train_steps:
+                self.network.train()
                 total_reward, steps = 0, 0
                 episode_losses = []
                 self.states = deque(maxlen = self.n_concat_states)
+                
                 state = self.env.reset()
                 action = self.epsilon_greedy_action(self.preproc_state(state), epsilon)
                 done = False
@@ -169,10 +195,18 @@ class DDQNAgent():
                     state = next_state
                     action = next_action
                 
+                # we test the model each 'log_every' episodes for 'eval_episodes' times
+                if episode % self.log_every == 0:
+                    self.save_model()
+                    total_reward, steps = evaluate_during_training(self, self.eval_episodes)
+                    template = '\n({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}, mean_episode_loss: {6:.3f}\n'
+                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon, (torch.tensor(episode_losses).mean())]
+                    print(template.format(*variables))
+                else:
+                    template = '({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}, mean_episode_loss: {6:.3f}'
+                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon, (torch.tensor(episode_losses).mean())]
+                    print(template.format(*variables))
                 episode += 1
-                template = '({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}, mean_episode_loss: {6:.3f}'
-                variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon, (torch.tensor(episode_losses).mean())]
-                print(template.format(*variables))
                 # at the end of each training episodes we decay epsilon
                 #epsilon = 0.99 * epsilon
                 epsilon = self.decay_epsilon(tot_steps, self.train_steps/1)
@@ -182,32 +216,33 @@ class DDQNAgent():
     
     def test(self, env, n_episodes=5, visualize=True):
         print('Testing for {} episodes ...'.format(n_episodes))
-        
-        for episode in range(n_episodes):
-            total_reward, steps = 0, 0
-            state = env.reset()
-            if visualize:
-                time.sleep(0.001)
-                env.render(mode='human')
-            done = False
-
-            while not done:
-                action = self.epsilon_greedy_action(self.preproc_state(state), epsilon=0.0) # greedy
-                next_state, reward, done, _ = env.step(action)
-                total_reward += reward
-                steps += 1
+        with torch.no_grad():
+            self.load_model()
+            self.network.eval()
+            for episode in range(n_episodes):
+                total_reward, steps = 0, 0
+                state = env.reset()
                 if visualize:
                     time.sleep(0.001)
                     env.render(mode='human')
-                state = next_state
+                done = False
 
-            template = 'Episode {0}: reward: {1:.3f}, steps: {2}'
-            variables = [episode + 1, total_reward, steps,]
-            print(template.format(*variables))
+                while not done:
+                    action = self.epsilon_greedy_action(self.preproc_state(state), epsilon=0.0) # greedy
+                    next_state, reward, done, _ = env.step(action)
+                    total_reward += reward
+                    steps += 1
+                    if visualize:
+                        time.sleep(0.001)
+                        env.render(mode='human')
+                    state = next_state
+
+                template = 'Episode {0}: reward: {1:.3f}, steps: {2}'
+                variables = [episode + 1, total_reward, steps,]
+                print(template.format(*variables))
             
     def save_model(self):
-        torch.save(self.network, "Q_net.pt")
+        torch.save(self.network, str(self.output_dir)+"/Q_net.pt")
 
     def load_model(self):
-        self.network = torch.load("Q_net.pt")
-        self.network.eval()
+        self.network = torch.load(str(self.output_dir)+"/Q_net.pt")

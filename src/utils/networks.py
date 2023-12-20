@@ -36,21 +36,23 @@ class ActorCritic_network(nn.Module):
     def __init__(self, n_inputs, n_outputs, bias=True):
         super(ActorCritic_network, self).__init__()
 
-        self.backbone = nn.Sequential(layer_init(nn.Linear(n_inputs, 32,  bias=bias)),
+        self.actor = nn.Sequential(layer_init(nn.Linear(n_inputs, 128,  bias=bias)),
                                       nn.Tanh(),
-                                      layer_init(nn.Linear(32, 64, bias=bias)),
+                                      layer_init(nn.Linear(128, 64, bias=bias)),
                                       nn.Tanh(),
-                                      layer_init(nn.Linear(64, 128, bias=bias)),
-                                      nn.Tanh(),
+                                      layer_init(nn.Linear(64, n_outputs), std=0.01)
                                      )
-        # ACTOR head
-        self.actor_head = layer_init(nn.Linear(128, n_outputs), std=0.01)
-        # CRITIC head
-        self.critic_head = layer_init(nn.Linear(128, 1), std=1)
+        
+        self.critic = nn.Sequential(layer_init(nn.Linear(n_inputs, 128,  bias=bias)),
+                                      nn.Tanh(),
+                                      layer_init(nn.Linear(128, 64, bias=bias)),
+                                      nn.Tanh(),
+                                      layer_init(nn.Linear(64, 1), std=1)
+                                     )
 
     def forward(self, x, actor_or_critic = "actor"):
         if actor_or_critic == "critic":
-            return self.critic_head(self.backbone(x))
+            return self.critic(x)
         else: # actor
-            logits = self.actor_head(self.backbone(x))
+            logits = self.actor(x)
             return F.softmax(logits, dim = -1)
