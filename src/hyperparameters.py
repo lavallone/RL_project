@@ -8,14 +8,14 @@ class Hparams:
     eval_episodes: int = 1
     
     ## TD tabular (sarsa and q-learning)
-    td_train_steps: int = 1000000
+    td_train_steps: int = 500000
     td_alpha: float = 0.2
     td_gamma: float = 0.99
     td_lambda_: float = 0.99
     td_min_eps: float = 0.01
     
     ## DDQN
-    dqn_train_steps: int = 1000000
+    dqn_train_steps: int = 1500000
     dqn_gamma: float = 0.99
     dqn_min_eps: float = 0.01
     dqn_network_update_frequency: int = 5
