@@ -1,10 +1,10 @@
 import os
 import gym
 import numpy as np
-from flloat.parser.ldlf import LDLfParser
 from gym.spaces import MultiDiscrete
+
+from flloat.parser.ldlf import LDLfParser
 from gym_breakout_pygame.wrappers.dict_space import BreakoutDictSpace
-from gym_breakout_pygame.wrappers.normal_space import  BreakoutNMultiDiscrete
 from gym_breakout_pygame.breakout_env import BreakoutConfiguration
 from temprl.wrapper import TemporalGoalWrapper, TemporalGoal
 from flloat.semantics import PLInterpretation

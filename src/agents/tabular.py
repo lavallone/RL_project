@@ -2,6 +2,8 @@ import numpy as np
 import random
 from copy import copy
 import time
+import torch
+import wandb
 
 # efficient implementation of Q-table
 class mydefaultdict(dict):
@@ -35,14 +37,32 @@ class Eligibility(object):
     def reset(self):
         self.traces = {}
 
+# evaluation loop called during training
+def evaluate_during_training(agent, eval_episodes):
+    total_reward_list, steps_list = [], []
+    for _ in range(eval_episodes):    
+        state = agent.env.reset()
+        total_reward, steps = 0, 0
+        done = False
+        while not done:
+            action = agent.epsilon_greedy_action(state, epsilon=0.0) # greedy
+            state, reward, done, _ = agent.env.step(action)
+            total_reward += reward
+            steps += 1.0
+            if steps > 2000: done = True
+        total_reward_list.append(total_reward)
+        steps_list.append(steps)
+    return torch.tensor(total_reward_list).mean(), int(torch.tensor(steps_list).mean())
 
 class TabularAgent():
-    def __init__(self, env, td_type = "sarsa", alpha=0.2, gamma=0.99, lambda_= 0.99, min_eps = 0.01, train_steps = 10000):
+    def __init__(self, env, td_type = "sarsa", alpha=0.2, gamma=0.99, lambda_= 0.99, min_eps = 0.01, train_steps = 10000, log_every = 10, eval_episodes = 1):
         super(TabularAgent, self).__init__()
         
         self.env = env
         self.td_type = td_type # sarsa or q-learning
         self.train_steps = train_steps
+        self.log_every = log_every
+        self.eval_episodes = eval_episodes
         self.alpha = alpha
         self.gamma = gamma
         self.lambda_ = lambda_
@@ -63,7 +83,7 @@ class TabularAgent():
         epsilon = max(self.min_eps, a * float(current_tot_steps) + b)
         return epsilon
 
-    def train(self, initial_epsilon=1.0):
+    def train(self, initial_epsilon=1.0, is_wandb = "no_wandb"):
 
         print("TRAINING STARTED...")
         
@@ -105,18 +125,29 @@ class TabularAgent():
                                 self.E.update(s, a)
                             else:
                                 self.E.to_zero(s, a)
-                    
+                    if steps > 2000: break
                     # update current state
                     state = next_state
                     action = next_action
+                    
                 tot_steps += steps
                 episode += 1
-                template = '({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}'
-                variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon,]
-                print(template.format(*variables))
+                # we test the model each 'log_every' episodes for 'eval_episodes' times
+                if episode % self.log_every == 0:
+                    total_reward, steps = evaluate_during_training(self, self.eval_episodes)
+                    template = '\n({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}\n'
+                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, 0.0,]
+                    print(template.format(*variables))
+                else:
+                    template = '({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}'
+                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon,]
+                    print(template.format(*variables))
+                if is_wandb == "wandb": 
+                    wandb.log({"total_reward" : total_reward})
+                    wandb.log({"total_steps" : steps})
                 # at the end of each training episodes we decay epsilon
                 #epsilon = 0.99 * epsilon
-                epsilon = self.decay_epsilon(tot_steps, self.train_steps/10)
+                epsilon = self.decay_epsilon(tot_steps, self.train_steps/2)
             print("TRAINING FINISHED!")
         except KeyboardInterrupt:
             pass
@@ -145,5 +176,3 @@ class TabularAgent():
             template = 'Episode {0}: reward: {1:.3f}, steps: {2}'
             variables = [episode + 1, total_reward, steps,]
             print(template.format(*variables))
-    
-    

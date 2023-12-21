@@ -6,6 +6,7 @@ import time
 import torch
 import torch.nn as nn
 from collections import namedtuple, deque
+import wandb
 
 from src.utils.networks import Q_network
 
@@ -52,6 +53,7 @@ def evaluate_during_training(agent, eval_episodes):
                 state, reward, done, _ = agent.env.step(action)
                 total_reward += reward
                 steps += 1.0
+            if steps > 2000: done = True
             total_reward_list.append(total_reward)
             steps_list.append(steps)
     return torch.tensor(total_reward_list).mean(), int(torch.tensor(steps_list).mean())
@@ -138,7 +140,7 @@ class DDQNAgent():
         loss = self.loss_function(y_qvals, qvals)
         return loss
 
-    def train(self, initial_epsilon=1.0):
+    def train(self, initial_epsilon=1.0, is_wandb = "no_wandb"):
 
         print("TRAINING STARTED...")
         
@@ -191,25 +193,29 @@ class DDQNAgent():
                     if tot_steps % self.network_sync_frequency == 0:
                         self.target_network.load_state_dict(self.network.state_dict())
                     
+                    if steps > 2000: break
                     # update current state
                     state = next_state
                     action = next_action
-                
+                    
+                episode += 1
                 # we test the model each 'log_every' episodes for 'eval_episodes' times
                 if episode % self.log_every == 0:
                     self.save_model()
                     total_reward, steps = evaluate_during_training(self, self.eval_episodes)
                     template = '\n({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}, mean_episode_loss: {6:.3f}\n'
-                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon, (torch.tensor(episode_losses).mean())]
+                    variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, 0.0, (torch.tensor(episode_losses).mean())]
                     print(template.format(*variables))
                 else:
                     template = '({0}/{1}) Episode {2}: total reward: {3:.3f}, steps: {4}, epsilon: {5:.6f}, mean_episode_loss: {6:.3f}'
                     variables = [tot_steps, self.train_steps, episode + 1, total_reward, steps, epsilon, (torch.tensor(episode_losses).mean())]
                     print(template.format(*variables))
-                episode += 1
+                if is_wandb == "wandb": 
+                    wandb.log({"total_reward" : total_reward})
+                    wandb.log({"total_steps" : steps})
                 # at the end of each training episodes we decay epsilon
                 #epsilon = 0.99 * epsilon
-                epsilon = self.decay_epsilon(tot_steps, self.train_steps/1)
+                epsilon = self.decay_epsilon(tot_steps, self.train_steps/2)
             print("TRAINING FINISHED!")
         except KeyboardInterrupt:
             pass

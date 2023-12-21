@@ -1,10 +1,8 @@
 import shutil
 from pathlib import Path
-import numpy as np
 import wandb
 import random
 from gym.wrappers import Monitor
-import time
 from gym_breakout_pygame.breakout_env import BreakoutConfiguration
 
 from src.utils.env import make_env
@@ -16,8 +14,10 @@ def run_agent(args, hparams):
     # SETTING-UP 
     if args.is_wandb == "wandb":
         wandb.login()
-        wandb_run_name = args.is_rb+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols)+"_"+args.rb_type
-    output_dir = Path( "runs/"+args.is_rb+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols)+"_"+args.rb_type )
+        if args.is_rb == "rb": wandb_run_name = args.is_rb+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols)+"_"+args.rb_type
+        else: wandb_run_name = args.is_rb+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols)
+    if args.is_rb == "rb": output_dir = Path( "runs/"+args.is_rb+"/"+args.rb_type+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols) )
+    else: output_dir = Path( "runs/"+args.is_rb+"/"+args.algorithm+"_"+args.action_type+"_"+str(args.rows)+"x"+str(args.cols))
     shutil.rmtree(output_dir, ignore_errors=True)
     output_dir.mkdir(parents=True, exist_ok=False)
 
@@ -39,8 +39,7 @@ def run_agent(args, hparams):
         t0 = (random.randint(0, args.cols-1), args.rows-1)
         t1 = (random.randint(0, args.cols-1), args.rows-2)
         t2 = (random.randint(0, args.cols-1), 0)
-        #targets = [t0, t1, t2]
-        targets = [t2, t1, t0]
+        targets = [t0, t1, t2]
         print(f"Targets are {targets}")
 
     # core environment configuration
@@ -53,21 +52,21 @@ def run_agent(args, hparams):
     
     # SETTING AGENT
     if args.algorithm == "sarsa" or args.algorithm == "q":
-        agent = TabularAgent(env, td_type=args.algorithm, alpha=hparams.td_alpha, gamma=hparams.td_gamma, lambda_= hparams.td_lambda_, min_eps = hparams.td_min_eps, train_steps=hparams.td_train_steps)
+        agent = TabularAgent(env, td_type=args.algorithm, alpha=hparams.td_alpha, gamma=hparams.td_gamma, lambda_= hparams.td_lambda_, min_eps = hparams.td_min_eps, train_steps=hparams.td_train_steps, log_every=hparams.log_every, eval_episodes=hparams.eval_episodes)
     elif args.algorithm == "dqn" or args.algorithm == "ddqn":
-        agent = DDQNAgent(env, output_dir=output_dir, type_=args.algorithm, train_steps=hparams.dqn_train_steps, log_every=hparams.dqn_log_every, eval_episodes=hparams.dqn_eval_episodes, gamma=hparams.dqn_gamma, min_eps=hparams.dqn_min_eps, network_update_frequency=hparams.dqn_network_update_frequency, \
+        agent = DDQNAgent(env, output_dir=output_dir, type_=args.algorithm, train_steps=hparams.dqn_train_steps, log_every=hparams.log_every, eval_episodes=hparams.eval_episodes, gamma=hparams.dqn_gamma, min_eps=hparams.dqn_min_eps, network_update_frequency=hparams.dqn_network_update_frequency, \
                           network_sync_frequency=hparams.dqn_network_sync_frequency, batch_size=hparams.dqn_batch_size, lr=hparams.dqn_lr, adam_eps=hparams.dqn_adam_eps, n_concat_states = hparams.dqn_n_concat_states)
     elif args.algorithm == "ppo":
-        agent = PPOAgent(env, output_dir=output_dir, train_episodes=hparams.ppo_train_episodes, n_epochs=hparams.ppo_n_epochs, n_rollout_steps=hparams.ppo_n_rollout_steps, log_every=hparams.ppo_log_every, eval_episodes=hparams.ppo_eval_episodes, gamma=hparams.ppo_gamma, lambda_=hparams.ppo_lambda_, \
+        agent = PPOAgent(env, output_dir=output_dir, train_episodes=hparams.ppo_train_episodes, n_epochs=hparams.ppo_n_epochs, n_rollout_steps=hparams.ppo_n_rollout_steps, log_every=hparams.log_every, eval_episodes=hparams.eval_episodes, gamma=hparams.ppo_gamma, lambda_=hparams.ppo_lambda_, \
                          clip_epsilon=hparams.ppo_clip_epsilon, c_1=hparams.ppo_c_1, c_2=hparams.ppo_c_2, batch_size=hparams.ppo_batch_size, lr=hparams.ppo_lr, adam_eps=hparams.ppo_adam_eps, n_concat_states = hparams.ppo_n_concat_states)
     # train
     if args.is_wandb == "wandb":
-        with wandb.init(entity="lavallone", project="RL", name=wandb_run_name, mode="offline"):
-            agent.train()
+        with wandb.init(entity="lavallone", project="RL", name=wandb_run_name, mode="online"):
+            agent.train(is_wandb = "wandb")
         wandb.finish()
     else: 
         agent.train()
     # test
-    agent.test(Monitor(env, output_dir / "videos"), n_episodes=hparams.eval_episodes, visualize=True)
+    agent.test(Monitor(env, output_dir / "videos"), n_episodes=5, visualize=True)
     
     env.close()

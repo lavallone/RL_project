@@ -4,12 +4,11 @@ from dataclasses import dataclass
 class Hparams:
     seed: int = 99 # random seed
     
-    #n_frames: int = 8 # number of frames to stack
-    train_episodes: int = 200 # training episodes
-    eval_episodes: int = 5 # number of evaluation episodes during training
+    log_every: int = 10
+    eval_episodes: int = 1
     
     ## TD tabular (sarsa and q-learning)
-    td_train_steps: int = 100000
+    td_train_steps: int = 1000000
     td_alpha: float = 0.2
     td_gamma: float = 0.99
     td_lambda_: float = 0.99
@@ -17,8 +16,6 @@ class Hparams:
     
     ## DDQN
     dqn_train_steps: int = 1000000
-    dqn_log_every: int = 10
-    dqn_eval_episodes: int = 1
     dqn_gamma: float = 0.99
     dqn_min_eps: float = 0.01
     dqn_network_update_frequency: int = 5
@@ -28,13 +25,10 @@ class Hparams:
     dqn_adam_eps: float = 1e-8
     dqn_n_concat_states: int = 1
     
-    
     ## PPO
     ppo_train_episodes: int = 100
     ppo_n_epochs: int = 20 # number of learning epochs each episode
     ppo_n_rollout_steps: int = 1000 # rollout steps
-    ppo_log_every: int = 5
-    ppo_eval_episodes: int = 1
     # params
     ppo_gamma: float = 0.99 # used for GAE
     ppo_lambda_: float = 0.95 # used for GAE 
