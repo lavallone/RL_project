@@ -17,6 +17,8 @@ This allows, in practice, to *design* the learning agent feature space separatel
 
 > ⚡ The primary objective is to individually design distinct Restraining Bolts and Reinforcement Learning algorithms, such as TD methods and DQN, and subsequently explore their integration in various combinations to demonstrate the effectiveness of the paradigm. The chosen test field is *Breakout* environment (Atari game). It's been adopted for its simplicity, its adaptability in setting various levels of difficulty, and its capacity to allow external observers to intuitively grasp the inherent potential of RBs.
 
+> 🧮 The plots of all the experiments can be inspected on WandB: https://wandb.ai/lavallone/RL.
+
 ## References
 <a id="1">[1]</a> 
 De Giacomo, G., Iocchi, L., Favorito, M., & Patrizi, F. (2019). Foundations for Restraining Bolts: Reinforcement Learning with LTLf/LDLf Restraining Specifications. Proceedings of the International Conference on Automated Planning and Scheduling, 29(1), 128-136.
